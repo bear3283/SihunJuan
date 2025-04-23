@@ -30,7 +30,7 @@ struct TapTheDotGameView: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                gradient: Gradient(colors: [Color.white, Color.yellow.opacity(1)]),
+                gradient: Gradient(colors: [Color.white, Color.yellow.opacity(0.3)]),
                 startPoint: .top,
                 endPoint: .bottom
             )
