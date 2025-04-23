@@ -14,6 +14,7 @@ struct TapTheDotGameView: View {
     @State private var showDot = true
     @State private var lastTapTime: Date = Date()
     @State private var gameOver = false
+    @State private var level = 0
     
     @State private var timer: Timer?
     @State private var dotTimer: Timer?
@@ -29,18 +30,16 @@ struct TapTheDotGameView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [Color.white, Color.yellow.opacity(1)]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            backgroundView()
+                .ignoresSafeArea()
 
             VStack {
                 if showStartScreen {
                     VStack {
-                        Text("Tap The Dot!")
-                            .font(.largeTitle)
+                        Text("Dot! Dot!")
+                            .font(.system(size: 50))
+                            .fontWeight(.bold)
+                            .foregroundStyle(.black)
                             .padding()
                         Button("Start Game") {
                             showStartScreen = false
@@ -65,7 +64,7 @@ struct TapTheDotGameView: View {
                             .font(.title2)
                         Spacer()
                         Text("Combo: \(combo)x")
-                            .foregroundColor(combo >= 2 ? .orange : .gray)
+                            .foregroundColor(comboColor())
                             .fontWeight(combo >= 2 ? .bold : .regular)
                         Spacer()
                         Text("Time: \(timeRemaining)")
@@ -111,32 +110,35 @@ struct TapTheDotGameView: View {
                     if timeRemaining <= 0 {
                         VStack {
                             Text("🎮 Game Over")
-                                .font(.largeTitle)
-                            Text("💯 Final Score: \(score)")
-                                .font(.title2)
+                                .font(.system(size: 50, weight: .bold, design: .default))
+                            Text("🎉 Final Score: \(score)")
+                                .font(.system(size: 30, weight: .bold, design: .default))
                                 .padding(.top)
                         }
                         .transition(.opacity)
+                        
+                        Spacer().frame(height: 50)
                     }
                 }
                 
                 if gameOver {
-                    VStack(spacing: 12) {
-                        Button("🔄 Restart") {
+                    VStack(spacing: 16) {
+                        Text("🏆 Top Scores")
+                            .font(.title2)
+                        ForEach(highScores.indices, id: \.self) { i in
+                            Text("\(i + 1). \(highScores[i].name): \(highScores[i].score)점")
+                        }
+
+                        Button("Restart") {
                             startGame()
                         }
                         .font(.title2)
                         .padding()
-                        .background(Color.blue)
+                        .background(Color.green)
                         .foregroundColor(.white)
-                        .cornerRadius(10)
+                        .cornerRadius(12)
                         .transition(.scale)
-                        
-                        Text("🏆 Top Scores")
-                            .font(.headline)
-                        ForEach(highScores.indices, id: \.self) { i in
-                            Text("\(i + 1). \(highScores[i].name): \(highScores[i].score)점")
-                        }
+                        .padding(.top)
                     }
                 }
             }
@@ -168,6 +170,7 @@ struct TapTheDotGameView: View {
         timeRemaining = 30
         showDot = true
         gameOver = false
+        level = 0
         moveDot()
 
         timer?.invalidate()
@@ -191,6 +194,7 @@ struct TapTheDotGameView: View {
                 if Date().timeIntervalSince(lastTapTime) > 1.5 {
                     combo = 0
                 }
+                updateLevel()
             }
         }
     }
@@ -198,10 +202,10 @@ struct TapTheDotGameView: View {
     func moveDot() {
         let screenWidth = UIScreen.main.bounds.size.width
         let screenHeight = UIScreen.main.bounds.size.height
-        let padding: CGFloat = 80
+        let padding: CGFloat = 100
 
-        let safeTop: CGFloat = 100
-        let safeBottom: CGFloat = 150
+        let safeTop: CGFloat = 120
+        let safeBottom: CGFloat = 170
 
         let newX = CGFloat.random(in: padding...(screenWidth - padding))
         let newY = CGFloat.random(in: safeTop...(screenHeight - safeBottom))
@@ -211,13 +215,53 @@ struct TapTheDotGameView: View {
         isBonusDot = Int.random(in: 1...100) <= 15 // 15% 확률로 등장
     }
     
+    func updateLevel() {
+        level = score / 100
+    }
+
     func dotInterval() -> TimeInterval {
         let baseInterval: Double = 1.5
-        let level = score / 100
         let speedMultiplier = pow(0.9, Double(level)) // 10% 빨라짐
         return max(0.3, baseInterval * speedMultiplier)
     }
+    
+    func comboColor() -> Color {
+        switch combo {
+        case 5...9:
+            return .orange
+        case 10...19:
+            return .pink
+        case 20...29:
+            return .purple
+        case 30...:
+            return .red
+        case 2...5:
+            return .orange.opacity(0.7)
+        default:
+            return .gray
+        }
+    }
+    
+    func backgroundView() -> some View {
+        switch level {
+        case 0:
+            return LinearGradient(gradient: Gradient(colors: [Color.white, Color.yellow.opacity(0.3)]), startPoint: .top, endPoint: .bottom)
+        case 1:
+            return LinearGradient(gradient: Gradient(colors: [Color.yellow.opacity(0.2), Color.orange.opacity(0.3)]), startPoint: .top, endPoint: .bottom)
+        case 2:
+            return LinearGradient(gradient: Gradient(colors: [Color.orange.opacity(0.3), Color.red.opacity(0.3)]), startPoint: .top, endPoint: .bottom)
+        case 3:
+            return LinearGradient(gradient: Gradient(colors: [Color.red.opacity(0.4), Color.purple.opacity(0.3)]), startPoint: .top, endPoint: .bottom)
+        case 4:
+            return LinearGradient(gradient: Gradient(colors: [Color.purple.opacity(0.3), Color.blue.opacity(0.3)]), startPoint: .top, endPoint: .bottom)
+        case 5:
+            return LinearGradient(gradient: Gradient(colors: [Color.blue.opacity(0.3), Color.green.opacity(0.3)]), startPoint: .top, endPoint: .bottom)
+        default:
+            return LinearGradient(gradient: Gradient(colors: [Color.green.opacity(0.5), Color.indigo.opacity(0.4)]), startPoint: .top, endPoint: .bottom)
+        }
+    }
 }
+
 
 #Preview {
     TapTheDotGameView()
