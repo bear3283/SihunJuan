@@ -9,6 +9,7 @@ final class GameCenterManager: NSObject, GKGameCenterControllerDelegate, Observa
     self.presentGameCenterViewController(vc)
   }
   
+  // TODO: - pause 기능을 구현해야함. -- 추가됨
   /// SwiftUI에서 Game Center ViewController를 present하는 메서드
   private func presentGameCenterViewController(_ viewController: UIViewController) {
     if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
