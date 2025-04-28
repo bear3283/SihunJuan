@@ -1,4 +1,30 @@
 import SwiftUI
+import GameKit
+
+final class GameCenterManager: NSObject, GKGameCenterControllerDelegate, ObservableObject {
+  
+  func presentGameCenter() {
+    let vc = GKGameCenterViewController(state: .default)
+    vc.gameCenterDelegate = self
+    self.presentGameCenterViewController(vc)
+  }
+  
+  /// SwiftUI에서 Game Center ViewController를 present하는 메서드
+  private func presentGameCenterViewController(_ viewController: UIViewController) {
+    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+      if let rootViewController = windowScene.windows.first?.rootViewController {
+        rootViewController.present(viewController, animated: true)
+      } else {
+        print("🚨 RootViewController를 찾을 수 없습니다.")
+      }
+    }
+  }
+  
+  // GKGameCenterControllerDelegate 프로토콜 준수하려면 구현 필요
+  func gameCenterViewControllerDidFinish(_ gameCenterViewController: GKGameCenterViewController) {
+    gameCenterViewController.dismiss(animated: true, completion: nil)
+  }
+}
 
 struct ScoreEntry: Codable, Identifiable {
     let id = UUID()
@@ -27,15 +53,32 @@ struct TapTheDotGameView: View {
     @State private var showNamePrompt = true
     @State private var showStartScreen = true
     @State private var askToSaveScore = false
-
+    @StateObject private var gameCenterManager = GameCenterManager()
+    
     var body: some View {
         ZStack {
             backgroundView()
                 .ignoresSafeArea()
-
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    combo = 0 // ❗️dot 외 터치 시 콤보 끊김
+                }
             VStack {
                 if showStartScreen {
                     VStack {
+                        Spacer()
+                        HStack {
+                            Circle()
+                                .fill(Color.blue)
+                                .frame(width: 120, height: 120)
+                                .offset(x: 100)
+                            
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 120, height: 120)
+                                .offset(x: -100)
+                        }
+                        
                         Text("Dot! Dot!")
                             .font(.system(size: 50))
                             .fontWeight(.bold)
@@ -45,17 +88,32 @@ struct TapTheDotGameView: View {
                             showStartScreen = false
                             startGame()
                         }
-                        .font(.title2)
+                        .font(.largeTitle)
                         .padding()
                         .background(Color.green)
                         .foregroundColor(.white)
                         .cornerRadius(12)
                         
                         Text("🏆 Top Scores")
-                            .font(.headline)
+                            .font(.title)
                             .padding(.top)
                         ForEach(highScores.indices, id: \.self) { i in
                             Text("\(i + 1). \(highScores[i].name): \(highScores[i].score)점")
+                        }
+                        Spacer()
+                        Button {
+                            gameCenterManager.presentGameCenter()
+                        } label: {
+                            HStack {
+                                Image(systemName: "globe")
+                                Text("World Scores")
+                            }
+                            .font(.title3)
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color.blue.opacity(0.2))
+                            .foregroundStyle(Color.black)
+                            .cornerRadius(8)
                         }
                     }
                 } else {
@@ -63,7 +121,7 @@ struct TapTheDotGameView: View {
                         Text("Score: \(score)")
                             .font(.title2)
                         Spacer()
-                        Text("Combo: \(combo)x")
+                        Text("COMBO: \(combo)x")
                             .foregroundColor(comboColor())
                             .fontWeight(combo >= 2 ? .bold : .regular)
                         Spacer()
@@ -71,9 +129,9 @@ struct TapTheDotGameView: View {
                             .font(.title2)
                     }
                     .padding()
-
+                    
                     Spacer()
-
+                    
                     if showDot {
                         Circle()
                             .fill(isBonusDot ? Color.blue : Color.red)
@@ -82,6 +140,8 @@ struct TapTheDotGameView: View {
                             .shadow(color: isBonusDot ? .blue.opacity(0.5) : .red.opacity(0.5), radius: 10)
                             .position(dotPosition)
                             .onTapGesture {
+                                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                                impactFeedback.impactOccurred()
                                 let now = Date()
                                 if now.timeIntervalSince(lastTapTime) <= 1.5 {
                                     combo += 1
@@ -95,18 +155,18 @@ struct TapTheDotGameView: View {
                                 } else {
                                     score += combo
                                 }
-
+                                
                                 if score == 50 || score == 100 {
                                     timeRemaining += 5
                                 }
-
+                                
                                 moveDot()
                             }
                             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: dotPosition)
                     }
-
+                    
                     Spacer()
-
+                    
                     if timeRemaining <= 0 {
                         VStack {
                             Text("🎮 Game Over")
@@ -128,7 +188,7 @@ struct TapTheDotGameView: View {
                         ForEach(highScores.indices, id: \.self) { i in
                             Text("\(i + 1). \(highScores[i].name): \(highScores[i].score)점")
                         }
-
+                        
                         Button("Restart") {
                             startGame()
                         }
@@ -139,6 +199,21 @@ struct TapTheDotGameView: View {
                         .cornerRadius(12)
                         .transition(.scale)
                         .padding(.top)
+                        
+                        Button {
+                            gameCenterManager.presentGameCenter()
+                        } label: {
+                            HStack {
+                                Image(systemName: "globe")
+                                Text("World Scores")
+                            }
+                            .font(.title3)
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color.blue.opacity(0.2))
+                            .foregroundStyle(Color.black)
+                            .cornerRadius(8)
+                        }
                     }
                 }
             }
@@ -163,7 +238,7 @@ struct TapTheDotGameView: View {
             }
         }
     }
-
+    
     func startGame() {
         score = 0
         combo = 0
@@ -172,7 +247,7 @@ struct TapTheDotGameView: View {
         gameOver = false
         level = 0
         moveDot()
-
+        
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             if timeRemaining > 0 {
@@ -185,7 +260,7 @@ struct TapTheDotGameView: View {
                 askToSaveScore = true
             }
         }
-
+        
         dotTimer?.invalidate()
         dotTimer = Timer.scheduledTimer(withTimeInterval: dotInterval(), repeats: true) { _ in
             if timeRemaining > 0 {
@@ -198,15 +273,15 @@ struct TapTheDotGameView: View {
             }
         }
     }
-
+    
     func moveDot() {
         let screenWidth = UIScreen.main.bounds.size.width
         let screenHeight = UIScreen.main.bounds.size.height
         let padding: CGFloat = 100
-
+        
         let safeTop: CGFloat = 120
         let safeBottom: CGFloat = 170
-
+        
         let newX = CGFloat.random(in: padding...(screenWidth - padding))
         let newY = CGFloat.random(in: safeTop...(screenHeight - safeBottom))
         withAnimation(.linear(duration: 0.2)) {
@@ -218,7 +293,7 @@ struct TapTheDotGameView: View {
     func updateLevel() {
         level = score / 100
     }
-
+    
     func dotInterval() -> TimeInterval {
         let baseInterval: Double = 1.5
         let speedMultiplier = pow(0.9, Double(level)) // 10% 빨라짐
