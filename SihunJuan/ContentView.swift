@@ -91,8 +91,6 @@ final class GameCenterManager: NSObject, GKGameCenterControllerDelegate, Observa
 }
 
 
-
-
 struct ScoreEntry: Codable, Identifiable {
     let id = UUID()
     let name: String
