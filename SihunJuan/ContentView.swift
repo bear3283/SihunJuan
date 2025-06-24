@@ -1,31 +1,95 @@
 import SwiftUI
 import GameKit
 
-final class GameCenterManager: NSObject, GKGameCenterControllerDelegate, ObservableObject {
-  
-  func presentGameCenter() {
-    let vc = GKGameCenterViewController(state: .default)
-    vc.gameCenterDelegate = self
-    self.presentGameCenterViewController(vc)
-  }
-  
-  // TODO: - pause 기능을 구현해야함. -- 추가됨
-  /// SwiftUI에서 Game Center ViewController를 present하는 메서드
-  private func presentGameCenterViewController(_ viewController: UIViewController) {
-    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-      if let rootViewController = windowScene.windows.first?.rootViewController {
-        rootViewController.present(viewController, animated: true)
-      } else {
-        print("🚨 RootViewController를 찾을 수 없습니다.")
-      }
+struct TimeProgressBar: View {
+    let timeRemaining: Int
+    let totalTime: Int
+
+    var progress: CGFloat {
+        max(0, min(1.0, CGFloat(timeRemaining) / CGFloat(totalTime)))
     }
-  }
-  
-  // GKGameCenterControllerDelegate 프로토콜 준수하려면 구현 필요
-  func gameCenterViewControllerDidFinish(_ gameCenterViewController: GKGameCenterViewController) {
-    gameCenterViewController.dismiss(animated: true, completion: nil)
-  }
+
+    var barColor: Color {
+        switch progress {
+        case let p where p > 0.66:
+            return .green
+        case let p where p > 0.33:
+            return .yellow
+        default:
+            return .red
+        }
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.gray.opacity(0.3))
+                .frame(height: 12)
+
+            RoundedRectangle(cornerRadius: 10)
+                .fill(barColor)
+                .frame(width: UIScreen.main.bounds.width * 0.9 * progress, height: 12)
+                .animation(.linear(duration: 0.3), value: progress)
+        }
+        .frame(height: 20)
+        .padding(.horizontal)
+    }
 }
+
+final class GameCenterManager: NSObject, GKGameCenterControllerDelegate, ObservableObject {
+    func checkLoginStatus() {
+        print("🔍 Game Center isAuthenticated:", GKLocalPlayer.local.isAuthenticated)
+        print("🔍 player alias:", GKLocalPlayer.local.alias)
+        print("🔍 player ID:", GKLocalPlayer.local.gamePlayerID)
+    }
+    func authenticateGameCenter() {
+        GKLocalPlayer.local.authenticateHandler = { viewController, error in
+            if let viewController = viewController {
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let rootVC = windowScene.windows.first?.rootViewController {
+                    rootVC.present(viewController, animated: true)
+                }
+            } else if GKLocalPlayer.local.isAuthenticated {
+                print("✅ Game Center 인증 성공")
+            } else {
+                print("❌ Game Center 인증 실패: \(error?.localizedDescription ?? "Unknown error")")
+            }
+        }
+    }
+    
+    func presentGameCenter() {
+        let vc = GKGameCenterViewController(state: .leaderboards)
+        vc.gameCenterDelegate = self
+        presentGameCenterViewController(vc)
+    }
+    
+    private func presentGameCenterViewController(_ viewController: UIViewController) {
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootVC = windowScene.windows.first?.rootViewController {
+            rootVC.present(viewController, animated: true)
+        } else {
+            print("🚨 RootViewController를 찾을 수 없습니다.")
+        }
+    }
+    
+    func gameCenterViewControllerDidFinish(_ gameCenterViewController: GKGameCenterViewController) {
+        gameCenterViewController.dismiss(animated: true, completion: nil)
+    }
+    
+    func reportScore(score: Int, leaderboardID: String) {
+        let player = GKLocalPlayer.local
+        let leaderboardIDs = [leaderboardID]
+        
+        GKLeaderboard.submitScore(score, context: 0, player: player, leaderboardIDs: leaderboardIDs) { error in
+            if let error = error {
+                print("❌ 점수 업로드 실패: \(error.localizedDescription)")
+            } else {
+                print("✅ 점수 업로드 성공")
+            }
+        }
+    }
+}
+
 
 struct ScoreEntry: Codable, Identifiable {
     let id = UUID()
@@ -42,20 +106,21 @@ struct TapTheDotGameView: View {
     @State private var lastTapTime: Date = Date()
     @State private var gameOver = false
     @State private var level = 0
-    
+
     @State private var timer: Timer?
     @State private var dotTimer: Timer?
     @State private var isBonusDot = false
-    
+
     @AppStorage("highScores") private var highScoresData: String = ""
     @State private var highScores: [ScoreEntry] = []
-    
+
     @State private var playerName: String = ""
     @State private var showNamePrompt = true
     @State private var showStartScreen = true
     @State private var askToSaveScore = false
     @StateObject private var gameCenterManager = GameCenterManager()
-    
+    @State private var preGameCountdown: Int? = nil
+
     var body: some View {
         ZStack {
             backgroundView()
@@ -87,7 +152,8 @@ struct TapTheDotGameView: View {
                             .padding()
                         Button("Start Game") {
                             showStartScreen = false
-                            startGame()
+                            preGameCountdown = 3
+                            startPreGameCountdown()
                         }
                         .font(.largeTitle)
                         .padding()
@@ -118,67 +184,78 @@ struct TapTheDotGameView: View {
                         }
                     }
                 } else {
-                    HStack {
-                        Text("Score: \(score)")
-                            .font(.title2)
+                    if let countdown = preGameCountdown {
                         Spacer()
-                        Text("COMBO: \(combo)x")
-                            .foregroundColor(comboColor())
-                            .fontWeight(combo >= 2 ? .bold : .regular)
+                        Text("Game starts in \(countdown)...")
+                            .font(.largeTitle)
+                            .bold()
+                            .padding()
                         Spacer()
-                        Text("Time: \(timeRemaining)")
-                            .font(.title2)
-                    }
-                    .padding()
-                    
-                    Spacer()
-                    
-                    if showDot {
-                        Circle()
-                            .fill(isBonusDot ? Color.blue : Color.red)
-                            .frame(width: isBonusDot ? 80 : 60, height: isBonusDot ? 80 : 60)
-                            .scaleEffect(1.2)
-                            .shadow(color: isBonusDot ? .blue.opacity(0.5) : .red.opacity(0.5), radius: 10)
-                            .position(dotPosition)
-                            .onTapGesture {
-                                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                                impactFeedback.impactOccurred()
-                                let now = Date()
-                                if now.timeIntervalSince(lastTapTime) <= 1.5 {
-                                    combo += 1
-                                } else {
-                                    combo = 1
-                                }
-                                lastTapTime = now
-                                
-                                if isBonusDot {
-                                    score += 5
-                                } else {
-                                    score += combo
-                                }
-                                
-                                if score == 50 || score == 100 {
-                                    timeRemaining += 5
-                                }
-                                
-                                moveDot()
-                            }
-                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: dotPosition)
-                    }
-                    
-                    Spacer()
-                    
-                    if timeRemaining <= 0 {
-                        VStack {
-                            Text("🎮 Game Over")
-                                .font(.system(size: 50, weight: .bold, design: .default))
-                            Text("🎉 Final Score: \(score)")
-                                .font(.system(size: 30, weight: .bold, design: .default))
-                                .padding(.top)
+                    } else {
+                        TimeProgressBar(timeRemaining: timeRemaining, totalTime: 30)
+
+                        HStack {
+                            Text("Score: \(score)")
+                                .font(.title2)
+                            Spacer()
+                            Text("COMBO: \(combo)x")
+                                .foregroundColor(comboColor())
+                                .fontWeight(combo >= 2 ? .bold : .regular)
+                            Spacer()
+                            Text("Time: \(timeRemaining)")
+                                .font(.title2)
                         }
-                        .transition(.opacity)
-                        
-                        Spacer().frame(height: 50)
+                        .padding()
+
+                        Spacer()
+
+                        if showDot {
+                            Circle()
+                                .fill(isBonusDot ? Color.blue : Color.red)
+                                .frame(width: isBonusDot ? 80 : 60, height: isBonusDot ? 80 : 60)
+                                .scaleEffect(1.2)
+                                .shadow(color: isBonusDot ? .blue.opacity(0.5) : .red.opacity(0.5), radius: 10)
+                                .position(dotPosition)
+                                .onTapGesture {
+                                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                                    impactFeedback.impactOccurred()
+                                    let now = Date()
+                                    if now.timeIntervalSince(lastTapTime) <= 1.5 {
+                                        combo += 1
+                                    } else {
+                                        combo = 1
+                                    }
+                                    lastTapTime = now
+
+                                    if isBonusDot {
+                                        score += 5
+                                    } else {
+                                        score += combo
+                                    }
+
+                                    if score == 50 || score == 100 {
+                                        timeRemaining += 5
+                                    }
+
+                                    moveDot()
+                                }
+                                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: dotPosition)
+                        }
+
+                        Spacer()
+
+                        if timeRemaining <= 0 {
+                            VStack {
+                                Text("🎮 Game Over")
+                                    .font(.system(size: 50, weight: .bold, design: .default))
+                                Text("🎉 Final Score: \(score)")
+                                    .font(.system(size: 30, weight: .bold, design: .default))
+                                    .padding(.top)
+                            }
+                            .transition(.opacity)
+
+                            Spacer().frame(height: 50)
+                        }
                     }
                 }
                 
@@ -237,9 +314,28 @@ struct TapTheDotGameView: View {
                let decoded = try? JSONDecoder().decode([ScoreEntry].self, from: data) {
                 highScores = decoded
             }
+            
+            gameCenterManager.authenticateGameCenter()
+            gameCenterManager.checkLoginStatus()
         }
     }
     
+    func startPreGameCountdown() {
+        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { timer in
+            if let current = preGameCountdown {
+                if current > 1 {
+                    preGameCountdown = current - 1
+                } else {
+                    timer.invalidate()
+                    preGameCountdown = nil
+                    startGame()
+                }
+            } else {
+                timer.invalidate()
+            }
+        }
+    }
+
     func startGame() {
         score = 0
         combo = 0
@@ -259,6 +355,8 @@ struct TapTheDotGameView: View {
                 dotTimer?.invalidate()
                 gameOver = true
                 askToSaveScore = true
+                
+                gameCenterManager.reportScore(score: score, leaderboardID: "ranking")
             }
         }
         
@@ -267,7 +365,7 @@ struct TapTheDotGameView: View {
             if timeRemaining > 0 {
                 moveDot()
                 // 1.5초마다 dot 바뀔 때 콤보 타이머 체크
-                if Date().timeIntervalSince(lastTapTime) > 1.5 {
+                if Date().timeIntervalSince(lastTapTime) > 2 {
                     combo = 0
                 }
                 updateLevel()
@@ -285,7 +383,7 @@ struct TapTheDotGameView: View {
         
         let newX = CGFloat.random(in: padding...(screenWidth - padding))
         let newY = CGFloat.random(in: safeTop...(screenHeight - safeBottom))
-        withAnimation(.linear(duration: 0.2)) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
             dotPosition = CGPoint(x: newX, y: newY)
         }
         isBonusDot = Int.random(in: 1...100) <= 15 // 15% 확률로 등장
