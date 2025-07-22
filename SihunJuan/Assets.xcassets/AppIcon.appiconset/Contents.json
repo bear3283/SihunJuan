@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "dotdot.png",
+      "filename" : "dotdoticon.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +13,7 @@
           "value" : "dark"
         }
       ],
-      "filename" : "dotdot 1.png",
+      "filename" : "dotdoticon 1.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -25,7 +25,7 @@
           "value" : "tinted"
         }
       ],
-      "filename" : "dotdot 2.png",
+      "filename" : "dotdoticon 2.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
