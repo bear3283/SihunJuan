@@ -7,7 +7,7 @@ class GameViewModel: ObservableObject {
     @Published var timeRemaining: Double = 10.0
     @Published var isGameOver: Bool = false
     @Published var dots: [Dot] = []
-    @Published var particleSystem = ParticleSystem()
+//    @Published var particleSystem = ParticleSystem()
     @Published var combo: Int = 0
     @Published var maxCombo: Int = 0
     @Published var showComboEffect: Bool = false
@@ -18,7 +18,8 @@ class GameViewModel: ObservableObject {
     
     // --- 광고 관련 로직 추가 ---
     // UserDefaults를 사용하여 앱을 종료해도 플레이 횟수가 유지되도록 합니다.
-    @Published var gamePlayCount: Int = UserDefaults.standard.integer(forKey: "gamePlayCount")
+    // '@AppStorage'를 사용하면 코드가 더 간결해집니다.
+    @AppStorage("gamePlayCount") var gamePlayCount: Int = 0
 
     init() {
         resetGame()
@@ -81,18 +82,20 @@ class GameViewModel: ObservableObject {
         timer?.invalidate()
         
         // --- 광고 호출 로직 ---
-        // 게임이 끝났을 때, 플레이 횟수를 1 증가시킵니다.
+        // 1. 게임이 끝났을 때, 플레이 횟수를 1 증가시킵니다.
         gamePlayCount += 1
-        UserDefaults.standard.set(gamePlayCount, forKey: "gamePlayCount")
         print("🎮 게임 플레이 횟수: \(gamePlayCount)")
 
-        // 플레이 횟수가 5의 배수일 때 광고를 표시합니다.
+        // 2. 플레이 횟수가 5의 배수일 때 광고를 표시합니다.
         if gamePlayCount % 5 == 0 {
-            print("✨ 5회 플레이 완료! 광고를 표시합니다.")
-            AdCoordinator.shared.presentAd()
+            print("✨ 5회 플레이 완료! 광고 표시를 시도합니다.")
+            InterstitialViewModel.shared.presentAd()
+            
+            
         }
     }
 }
+
 
 struct Dot: Identifiable {
     let id = UUID()
